@@ -1,0 +1,129 @@
+// Prisma schema for Smart Campus Management System
+// Run after `npm install`:
+//   npx prisma generate
+//   npx prisma migrate dev --name init
+//   npx prisma db seed
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  FACULTY
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id        Int    @id @default(autoincrement())
+  name      String
+  email     String @unique
+  password  String
+  role      Role
+
+  // Student-only fields
+  rollNo     String?  @unique
+  semester   Int?
+
+  // Faculty-only fields
+  facultyId  String?  @unique
+
+  department String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  attendanceRecords   Attendance[]    @relation("StudentAttendance")
+  markedAttendance    Attendance[]    @relation("MarkedByFaculty")
+  leaveRequests       LeaveRequest[]  @relation("StudentLeaveRequests")
+  reviewedLeaves      LeaveRequest[]  @relation("ReviewedByFaculty")
+  timetableEntries    Timetable[]     @relation("FacultyTimetable")
+  notificationsSent   Notification[] @relation("NotificationSender")
+
+  @@map("users")
+}
+
+model Timetable {
+  id      Int    @id @default(autoincrement())
+  day     String // Monday..Friday
+  period  Int
+  time    String // "09:00 - 09:50"
+  subject String
+  room    String
+
+  facultyId Int
+  faculty   User @relation("FacultyTimetable", fields: [facultyId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("timetable")
+  @@index([day, period])
+}
+
+model Attendance {
+  id      Int              @id @default(autoincrement())
+  subject String
+  date    DateTime
+  status  AttendanceStatus
+
+  studentId Int
+  student   User @relation("StudentAttendance", fields: [studentId], references: [id])
+
+  markedById Int
+  markedBy   User @relation("MarkedByFaculty", fields: [markedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("attendance")
+  @@index([studentId])
+  @@index([date])
+}
+
+model LeaveRequest {
+  id       Int         @id @default(autoincrement())
+  fromDate DateTime
+  toDate   DateTime
+  reason   String       @db.Text
+  status   LeaveStatus  @default(PENDING)
+  appliedOn DateTime    @default(now())
+
+  studentId Int
+  student   User @relation("StudentLeaveRequests", fields: [studentId], references: [id])
+
+  reviewedById Int?
+  reviewedBy   User? @relation("ReviewedByFaculty", fields: [reviewedById], references: [id])
+
+  @@map("leave_requests")
+  @@index([studentId])
+  @@index([status])
+}
+
+model Notification {
+  id       Int      @id @default(autoincrement())
+  title    String
+  body     String   @db.Text
+  audience String   // "All Students" | "Semester 5" | a rollNo, etc.
+  sentOn   DateTime @default(now())
+
+  sentById Int
+  sentBy   User @relation("NotificationSender", fields: [sentById], references: [id])
+
+  @@map("notifications")
+}
